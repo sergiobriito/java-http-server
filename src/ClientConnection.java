@@ -13,9 +13,11 @@ public class ClientConnection implements Runnable{
     @Override
     public void run() {
         try {
-            BufferedReader input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-            String requestLine = input.readLine();
-            HTTPRequest httpRequest = new HTTPRequest(requestLine);
+            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            char[] buffer = new char[1024];
+            int chars = bufferedReader.read(buffer, 0, 1024);
+            String request = String.valueOf(buffer, 0, chars).trim();
+            HTTPRequest httpRequest = new HTTPRequest(request);
             String response = httpRequest.handleRequest();
             clientSocket.getOutputStream().write(response.getBytes());
             clientSocket.close();

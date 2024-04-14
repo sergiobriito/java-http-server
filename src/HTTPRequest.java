@@ -9,33 +9,26 @@ public class HTTPRequest {
     private String method = null;
     private String uri = null;
     private String httpVersion = null;
+    private HashMap<String,String> body = null;
 
-    public HTTPRequest(String requestLine) {
-        parse(requestLine);
+    public HTTPRequest(String request) {
+        parse(request);
     }
 
-    public void parse(String request){
-        String[] arr = request.split(" ");
-        this.method = arr[0];
-        this.uri = arr[1];
-        this.httpVersion = arr[2];
-    };
-
     public String handleRequest(){
-        String response;
-        if (this.method.equals("GET")){
-            response = handleGet();
-        }else{
-            response = "Not implemented";
-        }
+        String response = switch (method){
+            case "GET" -> handleGet();
+            case "POST" -> handlePost();
+            default -> "Not implemented";
+        };
         return response;
     };
 
     public String handleGet() {
-        String responseLine;
-        String responseHeaders;
+        String responseLine = "";
+        String responseHeaders = "";
         String responsebody = "";
-        String filePath = "src"+ uri;
+        String filePath = "src" + uri;
         File file = new File(filePath);
         if (file.exists()){
             responseLine = getResponseLine(Status.OK);
@@ -48,27 +41,32 @@ public class HTTPRequest {
             responseHeaders = getResponseHeaders(null);
             responsebody = "<h1>404 Not Found</h1>";
         };
+        return responseLine + responseHeaders + "\r\n" + responsebody;
+    };
 
+    public String handlePost(){
+        FileService fileService = new FileService();
+        fileService.write(String.valueOf(body));
+        String responseLine = getResponseLine(Status.CREATED);
+        String responseHeaders = getResponseHeaders(null);
+        String responsebody = "<h1>CREATED</h1>";
         return responseLine + responseHeaders + "\r\n" + responsebody;
     };
 
     public String getResponseLine(Status status) {
         String statusName = switch (status) {
             case OK -> "OK";
+            case CREATED -> "Created";
             case NOT_FOUND -> "Not Found";
             default -> "Not Implemented";
         };
-        return this.httpVersion + " " + status.getCode() + " " + statusName + "\r\n";
+        return httpVersion + " " + status.getCode() + " " + statusName + "\r\n";
     }
 
-
     public String getResponseHeaders(HashMap<String, String> extraHeaders) {
-        String response;
         HashMap<String, String> headers = new HashMap<>();
         headers.put("Server", "HTTP-SERVER");
-        if (extraHeaders != null) {
-            headers.putAll(extraHeaders);
-        }
+        if (extraHeaders != null) {headers.putAll(extraHeaders);};
         StringBuilder builder = new StringBuilder();
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             builder.append(entry.getKey())
@@ -76,10 +74,8 @@ public class HTTPRequest {
                     .append(entry.getValue())
                     .append("\r\n");
         }
-        response = builder.toString();
-        return response;
+        return builder.toString();
     }
-
 
     public String getResponseBody(File file) {
         StringBuilder stringBuilder = new StringBuilder();
@@ -94,13 +90,51 @@ public class HTTPRequest {
         return stringBuilder.toString();
     }
 
-
     public String getContentType(String file) {
+        String contentType = "";
         Path path = Paths.get(file);
         try {
-            return Files.probeContentType(path);
+            contentType = Files.probeContentType(path);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            System.out.println("Failed to get the content type");
         }
+        return contentType;
+    }
+
+    public void parse(String request){
+        String[] arr = request.split(" ");
+        method = arr[0];
+        uri = arr[1];
+        httpVersion = arr[2].substring(0,8);
+        body = parseBody(request);
+    };
+
+    public HashMap<String, String> parseBody(String request) {
+        HashMap<String, String> map = new HashMap<>();
+        String[] lines = request.split("\\r?\\n");
+        boolean isBody = false;
+        StringBuilder stringBuilder = new StringBuilder();
+        for (String line : lines) {
+            if (isBody) {
+                stringBuilder.append(line);
+            } else if (line.isEmpty()) {
+                isBody = true;
+            }
+        }
+        String body = stringBuilder.toString().trim();
+        if (body.startsWith("{") && body.endsWith("}")) {
+            body = body.substring(1, body.length() - 1);
+            String[] keyValuePairs = body.split(",");
+            for (String pair : keyValuePairs) {
+                String[] entry = pair.trim().split(":");
+                if (entry.length == 2) {
+                    String key = entry[0].trim().replaceAll("\"", "");
+                    String value = entry[1].trim().replaceAll("\"", "");
+                    map.put(key, value);
+                }
+            }
+        }
+
+        return map;
     }
 }
